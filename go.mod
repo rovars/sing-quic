@@ -10,6 +10,7 @@ require (
 	github.com/metacubex/tls v0.1.0
 	golang.org/x/crypto v0.33.0
 	golang.org/x/exp v0.0.0-20240904232852-e7e105dedf7e
+	golang.org/x/sync v0.11.0
 )
 
 require (

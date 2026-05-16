@@ -236,13 +236,14 @@ type serverSession[U comparable] struct {
 }
 
 func (s *serverSession[U]) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost && r.Host == protocol.URLHost && r.URL.Path == protocol.URLPath {
+	if r.Method == http.MethodPost && protocol.IsValidHost(r.Host) && r.URL.Path == protocol.URLPath {
+		mode := protocol.DetectRequestMode(r.Header)
 		if s.authenticated {
 			protocol.AuthResponseToHeader(w.Header(), protocol.AuthResponse{
 				UDPEnabled: !s.udpDisabled,
 				Rx:         s.receiveBPS,
 				RxAuto:     s.receiveBPS == 0 && s.ignoreClientBandwidth,
-			})
+			}, mode)
 			w.WriteHeader(protocol.StatusAuthOK)
 			return
 		}
@@ -275,7 +276,7 @@ func (s *serverSession[U]) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			UDPEnabled: !s.udpDisabled,
 			Rx:         s.receiveBPS,
 			RxAuto:     rxAuto,
-		})
+		}, mode)
 		w.WriteHeader(protocol.StatusAuthOK)
 		if s.ctx.Done() != nil {
 			go func() {

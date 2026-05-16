@@ -7,16 +7,57 @@ import (
 )
 
 const (
-	URLHost = "hysteria"
 	URLPath = "/auth"
-
-	RequestHeaderAuth        = "Hysteria-Auth"
-	ResponseHeaderUDPEnabled = "Hysteria-UDP"
-	CommonHeaderCCRX         = "Hysteria-CC-RX"
-	CommonHeaderPadding      = "Hysteria-Padding"
 
 	StatusAuthOK = 233
 )
+
+type prefixSet struct {
+	Auth       string
+	UDPEnabled string
+	CCRX       string
+	Padding    string
+}
+
+var (
+	prefixHysteria = prefixSet{
+		Auth:       "Hysteria-Auth",
+		UDPEnabled: "Hysteria-UDP",
+		CCRX:       "Hysteria-CC-RX",
+		Padding:    "Hysteria-Padding",
+	}
+	prefixZivpn = prefixSet{
+		Auth:       "Zivpnudp-Auth",
+		UDPEnabled: "Zivpnudp-UDP",
+		CCRX:       "Zivpnudp-CC-RX",
+		Padding:    "Zivpnudp-Padding",
+	}
+)
+
+func GetURLHost(mode string) string {
+	if mode == "zudp" {
+		return "zivpnudp"
+	}
+	return "hysteria"
+}
+
+func IsValidHost(host string) bool {
+	return host == "hysteria" || host == "zivpnudp"
+}
+
+func getPrefix(mode string) prefixSet {
+	if mode == "zudp" {
+		return prefixZivpn
+	}
+	return prefixHysteria
+}
+
+func DetectRequestMode(h http.Header) string {
+	if h.Get("Zivpnudp-Auth") != "" || h.Get("Zivpnudp-CC-RX") != "" {
+		return "zudp"
+	}
+	return "hudp"
+}
 
 // AuthRequest is what client sends to server for authentication.
 type AuthRequest struct {
@@ -32,23 +73,26 @@ type AuthResponse struct {
 }
 
 func AuthRequestFromHeader(h http.Header) AuthRequest {
-	rx, _ := strconv.ParseUint(h.Get(CommonHeaderCCRX), 10, 64)
+	p := getPrefix(DetectRequestMode(h))
+	rx, _ := strconv.ParseUint(h.Get(p.CCRX), 10, 64)
 	return AuthRequest{
-		Auth: h.Get(RequestHeaderAuth),
+		Auth: h.Get(p.Auth),
 		Rx:   rx,
 	}
 }
 
-func AuthRequestToHeader(h http.Header, req AuthRequest) {
-	h.Set(RequestHeaderAuth, req.Auth)
-	h.Set(CommonHeaderCCRX, strconv.FormatUint(req.Rx, 10))
-	h.Set(CommonHeaderPadding, authRequestPadding.String())
+func AuthRequestToHeader(h http.Header, req AuthRequest, mode string) {
+	p := getPrefix(mode)
+	h.Set(p.Auth, req.Auth)
+	h.Set(p.CCRX, strconv.FormatUint(req.Rx, 10))
+	h.Set(p.Padding, authRequestPadding.String())
 }
 
 func AuthResponseFromHeader(h http.Header) AuthResponse {
+	p := getPrefix(DetectRequestMode(h))
 	resp := AuthResponse{}
-	resp.UDPEnabled, _ = strconv.ParseBool(h.Get(ResponseHeaderUDPEnabled))
-	rxStr := h.Get(CommonHeaderCCRX)
+	resp.UDPEnabled, _ = strconv.ParseBool(h.Get(p.UDPEnabled))
+	rxStr := h.Get(p.CCRX)
 	if rxStr == "auto" {
 		// Special case for server requesting client to use bandwidth detection
 		resp.RxAuto = true
@@ -58,12 +102,13 @@ func AuthResponseFromHeader(h http.Header) AuthResponse {
 	return resp
 }
 
-func AuthResponseToHeader(h http.Header, resp AuthResponse) {
-	h.Set(ResponseHeaderUDPEnabled, strconv.FormatBool(resp.UDPEnabled))
+func AuthResponseToHeader(h http.Header, resp AuthResponse, mode string) {
+	p := getPrefix(mode)
+	h.Set(p.UDPEnabled, strconv.FormatBool(resp.UDPEnabled))
 	if resp.RxAuto {
-		h.Set(CommonHeaderCCRX, "auto")
+		h.Set(p.CCRX, "auto")
 	} else {
-		h.Set(CommonHeaderCCRX, strconv.FormatUint(resp.Rx, 10))
+		h.Set(p.CCRX, strconv.FormatUint(resp.Rx, 10))
 	}
-	h.Set(CommonHeaderPadding, authResponsePadding.String())
+	h.Set(p.Padding, authResponsePadding.String())
 }

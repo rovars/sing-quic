@@ -40,6 +40,7 @@ type ClientOptions struct {
 	ReceiveBPS         uint64
 	SalamanderPassword string
 	Password           string
+	ProtocolMode       string // "hudp" (default) or "zudp"
 	TLSConfig          *tls.Config
 	QUICConfig         *quic.Config
 	UDPDisabled        bool
@@ -67,6 +68,7 @@ type Client struct {
 	udpDisabled        bool
 	realmOptions       *realm.Options
 	controlClient      *realm.ControlClient
+	protocolMode       string
 	setBBRCongestion   SetCongestionControllerFunc
 	udpMTU             int
 
@@ -133,6 +135,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		udpDisabled:        options.UDPDisabled,
 		realmOptions:       options.RealmOptions,
 		controlClient:      controlClient,
+		protocolMode:       options.ProtocolMode,
 		setBBRCongestion:   options.SetBBRCongestion,
 		udpMTU:             options.UdpMTU,
 	}
@@ -258,16 +261,20 @@ func (c *Client) authenticateAndWrap(ctx context.Context, packetDialer qtls.Pack
 			return quicConn, nil
 		},
 	}
+	mode := c.protocolMode
+	if mode == "" {
+		mode = "hudp"
+	}
 	request := &http.Request{
 		Method: http.MethodPost,
 		URL: &url.URL{
 			Scheme: "https",
-			Host:   protocol.URLHost,
+			Host:   protocol.GetURLHost(mode),
 			Path:   protocol.URLPath,
 		},
 		Header: make(http.Header),
 	}
-	protocol.AuthRequestToHeader(request.Header, protocol.AuthRequest{Auth: c.password, Rx: c.receiveBPS})
+	protocol.AuthRequestToHeader(request.Header, protocol.AuthRequest{Auth: c.password, Rx: c.receiveBPS}, mode)
 	response, err := http3Transport.RoundTrip(request.WithContext(ctx))
 	if err != nil {
 		_ = quicConn.CloseWithError(0, "")
