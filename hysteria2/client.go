@@ -41,6 +41,7 @@ type ClientOptions struct {
 	SalamanderPassword string
 	Password           string
 	ProtocolMode       string // "hudp" (default) or "zudp"
+	HopPacketConn      bool   // per-write round-robin hop (like conn.go)
 	TLSConfig          *tls.Config
 	QUICConfig         *quic.Config
 	UDPDisabled        bool
@@ -69,6 +70,7 @@ type Client struct {
 	realmOptions       *realm.Options
 	controlClient      *realm.ControlClient
 	protocolMode       string
+	hopPacketConn      bool
 	setBBRCongestion   SetCongestionControllerFunc
 	udpMTU             int
 
@@ -136,6 +138,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		realmOptions:       options.RealmOptions,
 		controlClient:      controlClient,
 		protocolMode:       options.ProtocolMode,
+		hopPacketConn:      options.HopPacketConn,
 		setBBRCongestion:   options.SetBBRCongestion,
 		udpMTU:             options.UdpMTU,
 	}
@@ -246,6 +249,17 @@ func (c *Client) authenticateAndWrap(ctx context.Context, packetDialer qtls.Pack
 			}
 			pc = NewSalamanderConn(pc, []byte(c.salamanderPassword))
 			return pc, nil
+		})
+	}
+
+	if c.hopPacketConn && len(c.serverPorts) > 0 {
+		_packetDialer := packetDialer
+		packetDialer = qtls.PacketDialerFunc(func(ctx context.Context, network, address string, rAddrPort netip.AddrPort) (net.PacketConn, error) {
+			pc, err := _packetDialer.ListenPacket(ctx, network, address, rAddrPort)
+			if err != nil {
+				return nil, err
+			}
+			return newHopPacketConn(pc, c.serverAddress, c.serverPorts), nil
 		})
 	}
 
