@@ -35,7 +35,7 @@ var (
 )
 
 func GetURLHost(mode string) string {
-	if mode == "zudp" {
+	if mode == "uz" {
 		return "zivpnudp"
 	}
 	return "hysteria"
@@ -46,7 +46,7 @@ func IsValidHost(host string) bool {
 }
 
 func getPrefix(mode string) prefixSet {
-	if mode == "zudp" {
+	if mode == "uz" {
 		return prefixZivpn
 	}
 	return prefixHysteria
@@ -54,9 +54,9 @@ func getPrefix(mode string) prefixSet {
 
 func DetectRequestMode(h http.Header) string {
 	if h.Get("Zivpnudp-Auth") != "" || h.Get("Zivpnudp-CC-RX") != "" {
-		return "zudp"
+		return "uz"
 	}
-	return "hudp"
+	return "hy"
 }
 
 // AuthRequest is what client sends to server for authentication.

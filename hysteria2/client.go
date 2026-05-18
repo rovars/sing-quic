@@ -40,8 +40,8 @@ type ClientOptions struct {
 	ReceiveBPS         uint64
 	SalamanderPassword string
 	Password           string
-	ProtocolMode       string // "hudp" (default) or "zudp"
-	HopPacketConn      bool   // per-write round-robin hop (like conn.go)
+	ServerMode         string // "hy" (default) or "uz"
+	RrPacketConn       bool   // per-write round-robin packet conn
 	TLSConfig          *tls.Config
 	QUICConfig         *quic.Config
 	UDPDisabled        bool
@@ -69,8 +69,8 @@ type Client struct {
 	udpDisabled        bool
 	realmOptions       *realm.Options
 	controlClient      *realm.ControlClient
-	protocolMode       string
-	hopPacketConn      bool
+	serverMode         string
+	rrPacketConn       bool
 	setBBRCongestion   SetCongestionControllerFunc
 	udpMTU             int
 
@@ -137,8 +137,8 @@ func NewClient(options ClientOptions) (*Client, error) {
 		udpDisabled:        options.UDPDisabled,
 		realmOptions:       options.RealmOptions,
 		controlClient:      controlClient,
-		protocolMode:       options.ProtocolMode,
-		hopPacketConn:      options.HopPacketConn,
+		serverMode:         options.ServerMode,
+		rrPacketConn:       options.RrPacketConn,
 		setBBRCongestion:   options.SetBBRCongestion,
 		udpMTU:             options.UdpMTU,
 	}
@@ -252,14 +252,14 @@ func (c *Client) authenticateAndWrap(ctx context.Context, packetDialer qtls.Pack
 		})
 	}
 
-	if c.hopPacketConn && len(c.serverPorts) > 0 {
+	if c.rrPacketConn && len(c.serverPorts) > 0 {
 		_packetDialer := packetDialer
 		packetDialer = qtls.PacketDialerFunc(func(ctx context.Context, network, address string, rAddrPort netip.AddrPort) (net.PacketConn, error) {
 			pc, err := _packetDialer.ListenPacket(ctx, network, address, rAddrPort)
 			if err != nil {
 				return nil, err
 			}
-			return newHopPacketConn(pc, c.serverAddress, c.serverPorts), nil
+			return newRrPacketConn(pc, c.serverAddress, c.serverPorts), nil
 		})
 	}
 
@@ -275,9 +275,9 @@ func (c *Client) authenticateAndWrap(ctx context.Context, packetDialer qtls.Pack
 			return quicConn, nil
 		},
 	}
-	mode := c.protocolMode
+	mode := c.serverMode
 	if mode == "" {
-		mode = "hudp"
+		mode = "hy"
 	}
 	request := &http.Request{
 		Method: http.MethodPost,
